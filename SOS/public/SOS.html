@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOS</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #map { 
+            flex-grow: 1;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        #controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        #sos-button { 
+            font-size: 24px; 
+            padding: 15px 30px; 
+            background-color: #ff4136; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+        }
+        #nearest-hospital { 
+            font-size: 24px; 
+            padding: 15px 30px; 
+            background-color: #04512a; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+        }
+        #status {
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 1px solid black;
+            z-index: 1000;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="map"></div>
+        <div id="controls">
+            <button id="sos-button">Send SOS</button>
+            <button id="nearest-hospital">Find Nearest Hospital</button>
+        </div>
+        <div id="status"></div>
+    </div>
+    <div id="email-sent-popup" class="popup">
+        <h2>SOS Email Sent</h2>
+        <p>Your emergency email has been sent successfully.</p>
+        <button id="close-popup">Close</button>
+    </div>
+    <script>
+        let map, marker, currentPosition;
+        const statusDiv = document.getElementById('status');
+
+        function initMap() {
+            map = L.map('map').setView([0, 0], 100);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            getLocation();
+        }
+
+        function getLocation() {
+            statusDiv.innerHTML = "Getting your location...";
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(updateMap, showError);
+            } else {
+                statusDiv.innerHTML = "Geolocation is not supported by this browser.";
+            }
+        }
+
+        function updateMap(position) {
+            currentPosition = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+
+            map.setView([currentPosition.lat, currentPosition.lng], 16);
+
+            if (marker) {
+                marker.setLatLng([currentPosition.lat, currentPosition.lng]);
+            } else {
+                marker = L.marker([currentPosition.lat, currentPosition.lng]).addTo(map);
+            }
+
+            statusDiv.innerHTML = "Your current location has been found and displayed on the map.";
+        }
+
+        function showError(error) {
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    statusDiv.innerHTML = "User denied the request for Geolocation.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    statusDiv.innerHTML = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    statusDiv.innerHTML = "The request to get user location timed out.";
+                    break;
+                case error.UNKNOWN_ERROR:
+                    statusDiv.innerHTML = "An unknown error occurred.";
+                    break;
+            }
+        }
+
+        function sendSOS() {
+            if (currentPosition) {
+                const location = `${currentPosition.lat},${currentPosition.lng}`;
+                sendEmail(location);
+                statusDiv.innerHTML = "Your current location has been found and displayed on the map.";
+            } else {
+                document.getElementById('status').textContent = "Location not available. Please try again.";
+            }
+        }
+
+        function sendEmail(location) {
+            fetch('/send-sos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ location })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('status').textContent = data.message;
+                showPopup();
+            })
+            .catch(error => {
+                console.error("Error sending SOS email:", error);
+                document.getElementById('status').textContent = "Failed to send SOS email. Please try again.";
+            });
+        }
+
+        function showPopup() {
+            document.getElementById('email-sent-popup').style.display = 'block';
+        }
+
+        document.getElementById('close-popup').addEventListener('click', () => {
+            document.getElementById('email-sent-popup').style.display = 'none';
+        });
+
+        function findNearestHospital() {
+            if (currentPosition) {
+                const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentPosition.lat},${currentPosition.lng}&destination=hospital&travelmode=driving`;
+                window.open(directionsUrl, '_blank');
+                statusDiv.innerHTML = "Directions to the nearest hospital opened in a new tab.";
+            } else {
+                statusDiv.innerHTML = "Location not available. Please try again.";
+            }
+        }
+
+        document.getElementById('sos-button').addEventListener('click', sendSOS);
+        document.getElementById('nearest-hospital').addEventListener('click', findNearestHospital);
+        document.getElementById('close-popup').addEventListener('click', function() {
+            document.getElementById('email-sent-popup').style.display = 'none';
+        });
+
+        window.onload = initMap;
+    </script>
+    </body>
+</html>
